@@ -16,7 +16,7 @@ interface ApiResponse<T> {
   }[];
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
 
   errors?: {
@@ -60,10 +60,16 @@ async function request<T>(
     headers.set("Authorization", "Bearer " + token);
   }
 
-  // Normalize base URL and endpoint to avoid duplicated segments like "/api/api"
   const base = API_URL.replace(/\/+$/, "");
-  let path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  if (base.endsWith("/api") && path.startsWith("/api")) {
+
+  let path = endpoint.startsWith("/")
+    ? endpoint
+    : `/${endpoint}`;
+
+  if (
+    base.endsWith("/api") &&
+    path.startsWith("/api")
+  ) {
     path = path.replace(/^\/api/, "");
   }
 
@@ -75,7 +81,8 @@ async function request<T>(
   let resultado: ApiResponse<T>;
 
   try {
-    resultado = (await response.json()) as ApiResponse<T>;
+    resultado =
+      (await response.json()) as ApiResponse<T>;
   } catch {
     throw new ApiError(
       "El servidor devolvió una respuesta inválida",
@@ -96,30 +103,50 @@ async function request<T>(
 
 export const api = {
   get<T>(endpoint: string): Promise<T> {
-    return request<T>(endpoint, { method: "GET" });
-  },
-
-  post<T>(endpoint: string, body?: unknown): Promise<T> {
     return request<T>(endpoint, {
-      method: "POST",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      method: "GET",
     });
   },
 
-  put<T>(endpoint: string, body?: unknown): Promise<T> {
+  post<T>(
+    endpoint: string,
+    body?: unknown
+  ): Promise<T> {
+    return request<T>(endpoint, {
+      method: "POST",
+      body:
+        body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
+    });
+  },
+
+  put<T>(
+    endpoint: string,
+    body?: unknown
+  ): Promise<T> {
     return request<T>(endpoint, {
       method: "PUT",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body:
+        body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
     });
   },
 
   delete<T>(endpoint: string): Promise<T> {
-    return request<T>(endpoint, { method: "DELETE" });
+    return request<T>(endpoint, {
+      method: "DELETE",
+    });
   },
 
-  upload<T>(endpoint: string, formData: FormData): Promise<T> {
-    return request<T>(endpoint, { method: "POST", body: formData });
+  upload<T>(
+    endpoint: string,
+    formData: FormData
+  ): Promise<T> {
+    return request<T>(endpoint, {
+      method: "POST",
+      body: formData,
+    });
   },
 };
-
-export { ApiError };
