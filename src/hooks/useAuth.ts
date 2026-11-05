@@ -1,116 +1,67 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 export interface AuthUser {
   id?: string;
   email?: string;
 }
 
-function obtenerToken(): string | null {
+const listeners = new Set<() => void>();
+
+function subscribe(callback: () => void) {
+  listeners.add(callback);
+  window.addEventListener("storage", callback); // sincroniza entre pestañas
+
+  return () => {
+    listeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getSnapshot(): string | null {
   return localStorage.getItem("token");
 }
 
-function obtenerUsuarioDesdeToken(
-  token: string | null
-): AuthUser | null {
-  if (!token) {
-    return null;
-  }
+function notificar() {
+  listeners.forEach((listener) => listener());
+}
+
+function login(token: string) {
+  localStorage.setItem("token", token);
+  notificar();
+}
+
+function logout() {
+  localStorage.removeItem("token");
+  notificar();
+}
+
+function obtenerUsuarioDesdeToken(token: string | null): AuthUser | null {
+  if (!token) return null;
 
   try {
     const partes = token.split(".");
+    if (partes.length !== 3) return null;
 
-    if (partes.length !== 3) {
-      return null;
-    }
+    const payloadBase64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(payloadBase64));
 
-    const payloadBase64 = partes[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-
-    const payload = JSON.parse(
-      atob(payloadBase64)
-    );
-
-    return {
-      id: payload.id,
-      email: payload.email,
-    };
+    return { id: payload.id, email: payload.email };
   } catch (error) {
-    console.error(
-      "Error leyendo token:",
-      error
-    );
-
+    console.error("Error leyendo token:", error);
     return null;
   }
 }
 
 export function useAuth() {
-  const [token, setToken] = useState<string | null>(
-    () => obtenerToken()
-  );
-
-  const [user, setUser] = useState<AuthUser | null>(
-    () =>
-      obtenerUsuarioDesdeToken(
-        obtenerToken()
-      )
-  );
-
-  const [loading] = useState(false);
-
-  const comprobarSesion = useCallback(() => {
-    const tokenActual = obtenerToken();
-
-    if (!tokenActual) {
-      setToken(null);
-      setUser(null);
-      return;
-    }
-
-    const usuario =
-      obtenerUsuarioDesdeToken(
-        tokenActual
-      );
-
-    if (!usuario) {
-      localStorage.removeItem("token");
-
-      setToken(null);
-      setUser(null);
-      return;
-    }
-
-    setToken(tokenActual);
-    setUser(usuario);
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener(
-      "storage",
-      comprobarSesion
-    );
-
-    return () => {
-      window.removeEventListener(
-        "storage",
-        comprobarSesion
-      );
-    };
-  }, [comprobarSesion]);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem("token");
-
-    setToken(null);
-    setUser(null);
-  }, []);
+  const token = useSyncExternalStore(subscribe, getSnapshot);
+  const user = useMemo(() => obtenerUsuarioDesdeToken(token), [token]);
 
   return {
     token,
     user,
-    loading,
+    loading: false,
     isAuthenticated: Boolean(token),
+    login,
     logout,
   };
 }
